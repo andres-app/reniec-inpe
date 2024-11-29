@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -82,6 +83,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container-fluid">
         <div class="row shadow-lg">
@@ -94,7 +96,7 @@
                     <li>Acceso rápido y seguro a datos personales.</li>
                     <li>Gestión eficiente de trámites en línea.</li>
                 </ul>
-                <img src="https://intranet.inpe.gob.pe/image/logo_inpe_470x184.png" alt=\"Logo RENIEC\" class=\"mb-4\" style=\"max-width: 150px; display: block; margin: 0 auto;\"> 
+                <img src="https://intranet.inpe.gob.pe/image/logo_inpe_470x184.png">
             </div>
             <!-- Sección derecha -->
             <div class="col-md-6 right-section">
@@ -110,35 +112,97 @@
                 <?php
                 if (isset($_GET['dni'])) {
                     $dni = $_GET['dni'];
-                    $key = 'cGVydWRldnMucHJvZHVjdGlvbi5maXRjb2RlcnMuNjc0N2EyYjI5ZmE0MTczZjYxMzIwNGVk';
 
-                    $url = "https://api.perudevs.com/api/v1/dni/complete?document=$dni&key=$key";
+                    // Conexión a la base de datos
+                    $dbHost = 'localhost';
+                    $dbName = 'bdreniec';
+                    $dbUser = 'root';
+                    $dbPass = '';
 
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_URL, $url);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    try {
+                        $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName", $dbUser, $dbPass);
+                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-                    $response = curl_exec($ch);
-                    curl_close($ch);
+                        // Obtener la clave de la base de datos
+                        $stmt = $pdo->prepare("SELECT api_key FROM api_keys WHERE service_name = :service_name LIMIT 1");
+                        $stmt->execute(['service_name' => 'PeruDevs']);
+                        $keyRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                    $data = json_decode($response, true);
+                        if ($keyRow) {
+                            $key = $keyRow['api_key'];
 
-                    echo '<div class="mt-4">';
-                    if (isset($data['estado']) && $data['estado'] == true) {
-                        echo "<h4>Datos encontrados:</h4>";
-                        echo "<p><strong>Nombres:</strong> " . $data['resultado']['nombres'] . "</p>";
-                        echo "<p><strong>Apellido Paterno:</strong> " . $data['resultado']['apellido_paterno'] . "</p>";
-                        echo "<p><strong>Apellido Materno:</strong> " . $data['resultado']['apellido_materno'] . "</p>";
-                        echo "<p><strong>Fecha de Nacimiento:</strong> " . $data['resultado']['fecha_nacimiento'] . "</p>";
-                        echo "<p><strong>Nombre completo:</strong> " . $data['resultado']['nombre_completo'] . "</p>";
-                        echo "<p><strong>Codigo de verificación:</strong> " . $data['resultado']['codigo_verificacion'] . "</p>";
-                        echo "<p><strong>Genero:</strong> " . $data['resultado']['genero'] . "</p>";
-                    } else {
-                        echo "<p>No se encontraron datos para el DNI ingresado.</p>";
+                            // Consultar la API
+                            $url = "https://api.perudevs.com/api/v1/dni/complete?document=$dni&key=$key";
+
+                            $ch = curl_init();
+                            curl_setopt($ch, CURLOPT_URL, $url);
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+                            $response = curl_exec($ch);
+                            curl_close($ch);
+
+                            $data = json_decode($response, true);
+
+                            echo '<div class="mt-4">';
+                            if (isset($data['estado']) && $data['estado'] == true) {
+                                // Datos encontrados
+                                $nombres = $data['resultado']['nombres'];
+                                $apellido_paterno = $data['resultado']['apellido_paterno'];
+                                $apellido_materno = $data['resultado']['apellido_materno'];
+                                $fecha_nacimiento = $data['resultado']['fecha_nacimiento'];
+                                $nombre_completo = $data['resultado']['nombre_completo'];
+                                $codigo_verificacion = $data['resultado']['codigo_verificacion'];
+                                $genero = $data['resultado']['genero'];
+
+                                // Formatear la fecha de nacimiento a 'YYYY-MM-DD' si es necesario
+                                if (strpos($fecha_nacimiento, '/') !== false) {
+                                    $fecha_nacimiento = DateTime::createFromFormat('d/m/Y', $fecha_nacimiento)->format('Y-m-d');
+                                }
+
+                                echo "<h4>Datos encontrados:</h4>";
+                                echo "<p><strong>Nombres:</strong> $nombres</p>";
+                                echo "<p><strong>Apellido Paterno:</strong> $apellido_paterno</p>";
+                                echo "<p><strong>Apellido Materno:</strong> $apellido_materno</p>";
+                                echo "<p><strong>Fecha de Nacimiento:</strong> $fecha_nacimiento</p>";
+                                echo "<p><strong>Nombre completo:</strong> $nombre_completo</p>";
+                                echo "<p><strong>Codigo de verificación:</strong> $codigo_verificacion</p>";
+                                echo "<p><strong>Genero:</strong> $genero</p>";
+
+                                // Insertar la consulta en la base de datos
+                                $insertStmt = $pdo->prepare("INSERT INTO api_requests (dni, nombres, apellido_paterno, apellido_materno, fecha_nacimiento, nombre_completo, codigo_verificacion, genero, estado_consulta) VALUES (:dni, :nombres, :apellido_paterno, :apellido_materno, :fecha_nacimiento, :nombre_completo, :codigo_verificacion, :genero, :estado_consulta)");
+                                $insertStmt->execute([
+                                    'dni' => $dni,
+                                    'nombres' => $nombres,
+                                    'apellido_paterno' => $apellido_paterno,
+                                    'apellido_materno' => $apellido_materno,
+                                    'fecha_nacimiento' => $fecha_nacimiento,
+                                    'nombre_completo' => $nombre_completo,
+                                    'codigo_verificacion' => $codigo_verificacion,
+                                    'genero' => $genero,
+                                    'estado_consulta' => 1 // Éxito
+                                ]);
+                            } else {
+                                // No se encontraron datos
+                                echo "<p>No se encontraron datos para el DNI ingresado.</p>";
+
+                                // Registrar consulta fallida
+                                $insertStmt = $pdo->prepare("INSERT INTO api_requests (dni, estado_consulta) VALUES (:dni, :estado_consulta)");
+                                $insertStmt->execute([
+                                    'dni' => $dni,
+                                    'estado_consulta' => 0 // Fallo
+                                ]);
+                            }
+                            echo '</div>';
+                        } else {
+                            echo "<p>Error: No se encontró la clave API en la base de datos.</p>";
+                        }
+                    } catch (PDOException $e) {
+                        echo "<p>Error en la conexión a la base de datos: " . $e->getMessage() . "</p>";
                     }
-                    echo '</div>';
                 }
                 ?>
+
+
             </div>
         </div>
     </div>
@@ -147,4 +211,5 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.3.0/js/bootstrap.min.js"></script>
 </body>
+
 </html>
