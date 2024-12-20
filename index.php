@@ -92,11 +92,11 @@
                 <h1>¡Bienvenido a la consulta RENIEC!</h1>
                 <p>Facilitamos la búsqueda de información confiable y actualizada.</p>
                 <ul class="mt-4">
-                    <li>Consulta de documentos oficiales.</li>
+                    <li>Consulta datos oficiales.</li>
                     <li>Acceso rápido y seguro a datos personales.</li>
                     <li>Gestión eficiente de trámites en línea.</li>
                 </ul>
-                <img src="https://intranet.inpe.gob.pe/image/logo_inpe_470x184.png">
+                <img src="https://cdn.www.gob.pe/uploads/document/file/2772011/Logotipo%20RENIEC.png?v=1642696746">
             </div>
             <!-- Sección derecha -->
             <div class="col-md-6 right-section">
@@ -110,97 +110,109 @@
                 </form>
 
                 <?php
-                if (isset($_GET['dni'])) {
-                    $dni = $_GET['dni'];
+if (isset($_GET['dni'])) {
+    $dni = $_GET['dni'];
 
-                    // Conexión a la base de datos
-                    $dbHost = 'localhost';
-                    $dbName = 'bdreniec';
-                    $dbUser = 'root';
-                    $dbPass = '';
+    // Conexión a la base de datos
+    $dbHost = 'localhost';
+    $dbName = 'bdreniec';
+    $dbUser = 'root';
+    $dbPass = '';
 
-                    try {
-                        $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName", $dbUser, $dbPass);
-                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    try {
+        $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName", $dbUser, $dbPass);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-                        // Obtener la clave de la base de datos
-                        $stmt = $pdo->prepare("SELECT api_key FROM api_keys WHERE service_name = :service_name LIMIT 1");
-                        $stmt->execute(['service_name' => 'PeruDevs']);
-                        $keyRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Obtener la clave de la base de datos
+        $stmt = $pdo->prepare("SELECT api_key FROM api_keys WHERE service_name = :service_name LIMIT 1");
+        $stmt->execute(['service_name' => 'PeruDevs']);
+        $keyRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                        if ($keyRow) {
-                            $key = $keyRow['api_key'];
+        if ($keyRow) {
+            $key = $keyRow['api_key'];
 
-                            // Consultar la API
-                            $url = "https://api.perudevs.com/api/v1/dni/complete?document=$dni&key=$key";
+            // Consultar la API
+            $url = "https://api.perudevs.com/api/v1/dni/complete?document=$dni&key=$key";
 
-                            $ch = curl_init();
-                            curl_setopt($ch, CURLOPT_URL, $url);
-                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
-                            $response = curl_exec($ch);
-                            curl_close($ch);
+            $response = curl_exec($ch);
+            curl_close($ch);
 
-                            $data = json_decode($response, true);
+            $data = json_decode($response, true);
 
-                            echo '<div class="mt-4">';
-                            if (isset($data['estado']) && $data['estado'] == true) {
-                                // Datos encontrados
-                                $nombres = $data['resultado']['nombres'];
-                                $apellido_paterno = $data['resultado']['apellido_paterno'];
-                                $apellido_materno = $data['resultado']['apellido_materno'];
-                                $fecha_nacimiento = $data['resultado']['fecha_nacimiento'];
-                                $nombre_completo = $data['resultado']['nombre_completo'];
-                                $codigo_verificacion = $data['resultado']['codigo_verificacion'];
-                                $genero = $data['resultado']['genero'];
+            echo '<div class="mt-4">';
+            if ($data && isset($data['estado']) && $data['estado'] == true) {
+                // Datos encontrados
+                $nombres = $data['resultado']['nombres'];
+                $apellido_paterno = $data['resultado']['apellido_paterno'];
+                $apellido_materno = $data['resultado']['apellido_materno'];
+                $fecha_nacimiento = $data['resultado']['fecha_nacimiento'];
+                $nombre_completo = $data['resultado']['nombre_completo'];
+                $codigo_verificacion = $data['resultado']['codigo_verificacion'];
+                $genero = $data['resultado']['genero'];
 
-                                // Formatear la fecha de nacimiento a 'YYYY-MM-DD' si es necesario
-                                if (strpos($fecha_nacimiento, '/') !== false) {
-                                    $fecha_nacimiento = DateTime::createFromFormat('d/m/Y', $fecha_nacimiento)->format('Y-m-d');
-                                }
-
-                                echo "<h4>Datos encontrados:</h4>";
-                                echo "<p><strong>Nombres:</strong> $nombres</p>";
-                                echo "<p><strong>Apellido Paterno:</strong> $apellido_paterno</p>";
-                                echo "<p><strong>Apellido Materno:</strong> $apellido_materno</p>";
-                                echo "<p><strong>Fecha de Nacimiento:</strong> $fecha_nacimiento</p>";
-                                echo "<p><strong>Nombre completo:</strong> $nombre_completo</p>";
-                                echo "<p><strong>Codigo de verificación:</strong> $codigo_verificacion</p>";
-                                echo "<p><strong>Genero:</strong> $genero</p>";
-
-                                // Insertar la consulta en la base de datos
-                                $insertStmt = $pdo->prepare("INSERT INTO api_requests (dni, nombres, apellido_paterno, apellido_materno, fecha_nacimiento, nombre_completo, codigo_verificacion, genero, estado_consulta) VALUES (:dni, :nombres, :apellido_paterno, :apellido_materno, :fecha_nacimiento, :nombre_completo, :codigo_verificacion, :genero, :estado_consulta)");
-                                $insertStmt->execute([
-                                    'dni' => $dni,
-                                    'nombres' => $nombres,
-                                    'apellido_paterno' => $apellido_paterno,
-                                    'apellido_materno' => $apellido_materno,
-                                    'fecha_nacimiento' => $fecha_nacimiento,
-                                    'nombre_completo' => $nombre_completo,
-                                    'codigo_verificacion' => $codigo_verificacion,
-                                    'genero' => $genero,
-                                    'estado_consulta' => 1 // Éxito
-                                ]);
-                            } else {
-                                // No se encontraron datos
-                                echo "<p>No se encontraron datos para el DNI ingresado.</p>";
-
-                                // Registrar consulta fallida
-                                $insertStmt = $pdo->prepare("INSERT INTO api_requests (dni, estado_consulta) VALUES (:dni, :estado_consulta)");
-                                $insertStmt->execute([
-                                    'dni' => $dni,
-                                    'estado_consulta' => 0 // Fallo
-                                ]);
-                            }
-                            echo '</div>';
-                        } else {
-                            echo "<p>Error: No se encontró la clave API en la base de datos.</p>";
-                        }
-                    } catch (PDOException $e) {
-                        echo "<p>Error en la conexión a la base de datos: " . $e->getMessage() . "</p>";
-                    }
+                // Formatear fecha de nacimiento
+                if (strpos($fecha_nacimiento, '/') !== false) {
+                    $fecha_nacimiento = DateTime::createFromFormat('d/m/Y', $fecha_nacimiento)->format('Y-m-d');
                 }
-                ?>
+
+                echo "<h4>Datos encontrados:</h4>";
+                echo "<p><strong>Nombres:</strong> $nombres</p>";
+                echo "<p><strong>Apellido Paterno:</strong> $apellido_paterno</p>";
+                echo "<p><strong>Apellido Materno:</strong> $apellido_materno</p>";
+                echo "<p><strong>Fecha de Nacimiento:</strong> $fecha_nacimiento</p>";
+                echo "<p><strong>Nombre completo:</strong> $nombre_completo</p>";
+                echo "<p><strong>Código de verificación:</strong> $codigo_verificacion</p>";
+                echo "<p><strong>Género:</strong> $genero</p>";
+
+                // Usar INSERT ON DUPLICATE KEY UPDATE
+                $sql = "INSERT INTO api_requests (dni, nombres, apellido_paterno, apellido_materno, fecha_nacimiento, nombre_completo, codigo_verificacion, genero, estado_consulta)
+                        VALUES (:dni, :nombres, :apellido_paterno, :apellido_materno, :fecha_nacimiento, :nombre_completo, :codigo_verificacion, :genero, 1)
+                        ON DUPLICATE KEY UPDATE
+                        nombres = VALUES(nombres),
+                        apellido_paterno = VALUES(apellido_paterno),
+                        apellido_materno = VALUES(apellido_materno),
+                        fecha_nacimiento = VALUES(fecha_nacimiento),
+                        nombre_completo = VALUES(nombre_completo),
+                        codigo_verificacion = VALUES(codigo_verificacion),
+                        genero = VALUES(genero),
+                        estado_consulta = 1";
+
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    'dni' => $dni,
+                    'nombres' => $nombres,
+                    'apellido_paterno' => $apellido_paterno,
+                    'apellido_materno' => $apellido_materno,
+                    'fecha_nacimiento' => $fecha_nacimiento,
+                    'nombre_completo' => $nombre_completo,
+                    'codigo_verificacion' => $codigo_verificacion,
+                    'genero' => $genero,
+                ]);
+            } else {
+                echo "<p>No se encontraron datos para el DNI ingresado.</p>";
+
+                // Registrar consulta fallida
+                $sql = "INSERT INTO api_requests (dni, estado_consulta)
+                        VALUES (:dni, 0)
+                        ON DUPLICATE KEY UPDATE estado_consulta = 0";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute(['dni' => $dni]);
+            }
+
+            echo '</div>';
+        } else {
+            echo "<p>Error: No se encontró la clave API en la base de datos.</p>";
+        }
+    } catch (PDOException $e) {
+        echo "<p>Error en la conexión a la base de datos: " . $e->getMessage() . "</p>";
+    }
+}
+?>
+
 
 
             </div>
